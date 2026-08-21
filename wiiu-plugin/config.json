@@ -1,0 +1,11 @@
+{
+    "server_ip": "192.168.100.61",
+    "server_port": 12345,
+    "auto_reconnect": true,
+    "reconnect_interval_ms": 5000,
+    "controller_mapping": {
+        "swap_sticks": false,
+        "trigger_threshold": 30,
+        "deadzone": 8689
+    }
+}

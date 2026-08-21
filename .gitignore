@@ -1,0 +1,32 @@
+# Build artifacts
+build/
+*.o
+*.wps
+*.elf
+*.d
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.env
+
+# Android
+android-server/app/build/
+android-server/.gradle/
+*.apk
+
+# Temporary
+*.tmp
+*.log

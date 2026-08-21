@@ -1,0 +1,112 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="24dp"
+    android:background="#1a1a2e">
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="WiiU Bridge Server"
+        android:textSize="28sp"
+        android:textColor="#e94560"
+        android:textStyle="bold"
+        android:layout_gravity="center_horizontal"
+        android:layout_marginBottom="24dp"/>
+
+    <!-- Status -->
+    <TextView
+        android:id="@+id/tvStatus"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Disconnected"
+        android:textSize="20sp"
+        android:textColor="#ff0000"
+        android:textStyle="bold"
+        android:gravity="center"
+        android:padding="12dp"
+        android:background="#16213e"
+        android:layout_marginBottom="16dp"/>
+
+    <!-- Wii U IP Input -->
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Wii U IP Address:"
+        android:textColor="#ffffff"
+        android:textSize="14sp"
+        android:layout_marginBottom="4dp"/>
+
+    <EditText
+        android:id="@+id/etWiiUIP"
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:hint="192.168.100.100"
+        android:textColor="#ffffff"
+        android:textColorHint="#666666"
+        android:background="#16213e"
+        android:padding="12dp"
+        android:inputType="text"
+        android:layout_marginBottom="16dp"/>
+
+    <!-- Connect/Disconnect buttons -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:layout_marginBottom="16dp">
+
+        <Button
+            android:id="@+id/btnConnect"
+            android:layout_width="0dp"
+            android:layout_height="48dp"
+            android:layout_weight="1"
+            android:text="Start Bridge"
+            android:backgroundTint="#0f3460"
+            android:textColor="#ffffff"
+            android:layout_marginEnd="8dp"/>
+
+        <Button
+            android:id="@+id/btnDisconnect"
+            android:layout_width="0dp"
+            android:layout_height="48dp"
+            android:layout_weight="1"
+            android:text="Stop"
+            android:backgroundTint="#533483"
+            android:textColor="#ffffff"
+            android:layout_marginStart="8dp"/>
+    </LinearLayout>
+
+    <!-- Controller Info -->
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Controller Input:"
+        android:textColor="#ffffff"
+        android:textSize="14sp"
+        android:layout_marginBottom="4dp"/>
+
+    <TextView
+        android:id="@+id/tvController"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="No input"
+        android:textColor="#00ff00"
+        android:fontFamily="monospace"
+        android:padding="12dp"
+        android:background="#16213e"
+        android:layout_marginBottom="16dp"/>
+
+    <!-- Instructions -->
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="1. Connect Bluetooth controller to this phone\n2. Enter Wii U IP address above\n3. Tap 'Start Bridge'\n4. Run WiiU Bridge plugin on Wii U"
+        android:textColor="#aaaaaa"
+        android:textSize="12sp"
+        android:lineSpacingExtra="4dp"
+        android:layout_marginTop="16dp"/>
+
+</LinearLayout>
