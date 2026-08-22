@@ -10,8 +10,8 @@ WUT_ROOT := $(DEVKITPRO)/wut
 TARGET = wiiu_bridge_plugin
 BUILD = build
 SOURCES = .
-CFILES := dsu_crc32.c dsu_server.c discovery.c bridge.c bridge_udp.c
-CPPFILES := main_v2.cpp
+CFILES :=
+CPPFILES := main_hook.cpp
 CFLAGS := -g -Wall -O2 -ffunction-sections $(MACHDEP)
 CFLAGS += $(INCLUDE) -D__WIIU__ -D__WUT__ -D__WUPS__
 CXXFLAGS := $(CFLAGS) -std=c++20

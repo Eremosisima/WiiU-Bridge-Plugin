@@ -13,7 +13,6 @@
 #include <thread>
 #include <arpa/inet.h>
 #include "dsu_server.h"
-#include "discovery.h"
 
 #define DEBUG_FUNCTION_LINE(fmt, ...) OSReport("[WiiU-Bridge] " fmt "\n", ##__VA_ARGS__)
 
@@ -40,9 +39,6 @@ static bool startNetwork() {
     int r = dsu_server_start();
     DEBUG_FUNCTION_LINE("DSU server start: %d", r);
     if (r != 0) return false;
-    
-    discovery_init();
-    discovery_start();
     
     networkInitialized = true;
     DEBUG_FUNCTION_LINE("startNetwork: OK");
@@ -147,7 +143,6 @@ ON_APPLICATION_ENDS() {
     DEBUG_FUNCTION_LINE("ON_APPLICATION_ENDS");
     if (networkInitialized) {
         dsu_server_stop();
-        discovery_stop();
         networkInitialized = false;
     }
 }
