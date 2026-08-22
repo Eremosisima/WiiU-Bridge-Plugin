@@ -9,6 +9,10 @@
 #include <string.h>
 #include <stdio.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #define DISCOVERY_PORT         26761
 #define DISCOVERY_MAGIC        "DSU_DISCOVER"
 #define DISCOVERY_MAGIC_LEN    12
@@ -45,3 +49,7 @@ int discovery_send_broadcast(void);
 int discovery_get_servers(DiscoveryServer *out, int max_count);
 int discovery_get_server_count(void);
 int discovery_thread_func(int argc, const char **argv);
+
+#ifdef __cplusplus
+}
+#endif

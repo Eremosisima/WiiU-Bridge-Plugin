@@ -1,6 +1,10 @@
 #include "discovery.h"
 #include <coreinit/debug.h>
 #include <coreinit/time.h>
+#include <stdlib.h>
+#include <string.h>
+
+#define DEBUG_FUNCTION_LINE(fmt, ...) OSReport("[WiiU-Bridge] " fmt "\n", ##__VA_ARGS__)
 
 DiscoveryState g_discovery = {
     .socket_fd = -1,
@@ -14,14 +18,20 @@ int discovery_thread_func(int argc, const char **argv) {
     uint8_t buffer[256];
     struct sockaddr_in client_addr;
     socklen_t client_len = sizeof(client_addr);
-    struct timeval tv;
-    tv.tv_sec = 0;
-    tv.tv_usec = 100000;
-    setsockopt(g_discovery.socket_fd, SOL_SOCKET, SO_RCVTIMEO, (const char *)&tv, sizeof(tv));
+    
+    // Set socket to non-blocking
+    int nonblock = 1;
+    setsockopt(g_discovery.socket_fd, SOL_SOCKET, SO_NONBLOCK, 
+               (const char *)&nonblock, sizeof(nonblock));
+    
     while (!g_discovery.should_stop) {
         int received = recvfrom(g_discovery.socket_fd, buffer, sizeof(buffer) - 1, 0,
                                 (struct sockaddr *)&client_addr, &client_len);
-        if (received <= 0) continue;
+        if (received <= 0) {
+            // No data available - sleep and try again
+            OSSleepTicks(OSSecondsToTicks(0.01));  // 10ms
+            continue;
+        }
         buffer[received] = '\0';
         char *token = strtok((char *)buffer, "|");
         if (!token || strcmp(token, DISCOVERY_RESPONSE) != 0) continue;
@@ -67,7 +77,6 @@ int discovery_thread_func(int argc, const char **argv) {
 
 int discovery_init(void) {
     OSInitMutex(&g_discovery.mutex);
-    socket_lib_init();
     for (int i = 0; i < DISCOVERY_MAX_SERVERS; i++) {
         g_discovery.servers[i].valid = FALSE;
         g_discovery.servers[i].name[0] = '\0';

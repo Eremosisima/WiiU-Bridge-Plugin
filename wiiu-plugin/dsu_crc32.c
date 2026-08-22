@@ -1,4 +1,5 @@
 #include "dsu_crc32.h"
+#include <string.h>
 
 /**
  * CRC32 lookup table for polynomial 0xEDB88320

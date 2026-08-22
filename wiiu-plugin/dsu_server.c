@@ -3,6 +3,8 @@
 #include <coreinit/debug.h>
 #include <coreinit/time.h>
 #include <coreinit/cache.h>
+#include <stdlib.h>
+#include <string.h>
 
 DSUServerState g_dsu_server = {
     .socket_fd = -1,
@@ -73,11 +75,15 @@ static void build_header(DSUHeader *header, uint32_t id, uint16_t payload_len) {
 static void handle_version(DSUServerState *state, struct sockaddr_in *client, socklen_t len) {
     uint8_t packet[DSU_MAX_PACKET];
     DSUHeader *h = (DSUHeader *)packet;
-    build_header(h, state->server_id, 2);
+    build_header(h, state->server_id, 6);  // 4 bytes msg_type + 2 bytes version
+    uint8_t *p = packet + DSU_HEADER_SIZE;
+    uint32_t msg_type = DSU_MSG_VERSION;
+    memcpy(p, &msg_type, 4);
+    p += 4;
     uint16_t ver = DSU_VERSION;
-    memcpy(packet + DSU_HEADER_SIZE, &ver, 2);
-    h->crc32 = dsu_crc32_packet(packet, DSU_HEADER_SIZE + 2);
-    sendto(state->socket_fd, packet, DSU_HEADER_SIZE + 2, 0, (struct sockaddr *)client, len);
+    memcpy(p, &ver, 2);
+    h->crc32 = dsu_crc32_packet(packet, DSU_HEADER_SIZE + 6);
+    sendto(state->socket_fd, packet, DSU_HEADER_SIZE + 6, 0, (struct sockaddr *)client, len);
     state->packets_sent++;
 }
 
@@ -90,9 +96,12 @@ static void handle_controller_info(DSUServerState *state, struct sockaddr_in *cl
         if ((flags & 0x01) && slot != i) continue;
         uint8_t pkt[DSU_MAX_PACKET];
         DSUHeader *h = (DSUHeader *)pkt;
-        uint16_t psz = 11;
+        uint16_t psz = 15;  // 4 bytes msg_type + 11 bytes data
         build_header(h, state->server_id, psz);
         uint8_t *p = pkt + DSU_HEADER_SIZE;
+        uint32_t msg_type = DSU_MSG_CONTROLLER;
+        memcpy(p, &msg_type, 4);
+        p += 4;
         *p++ = i;
         *p++ = state->controllers[i].state;
         *p++ = state->controllers[i].model;
@@ -148,9 +157,12 @@ static void send_pad_data_to_clients(DSUServerState *state) {
         if (slot >= DSU_MAX_SLOTS) continue;
         if (state->controllers[slot].state != DSU_STATE_CONNECTED) continue;
         DSUHeader *h = (DSUHeader *)pkt;
-        uint16_t psz = 22;
+        uint16_t psz = 26;  // 4 bytes msg_type + 22 bytes data
         build_header(h, state->server_id, psz);
         uint8_t *p = pkt + DSU_HEADER_SIZE;
+        uint32_t msg_type = DSU_MSG_PAD_DATA;
+        memcpy(p, &msg_type, 4);
+        p += 4;
         uint32_t pc = state->packets_sent;
         memcpy(p, &pc, 4);
         p += 4;
@@ -175,22 +187,28 @@ int dsu_server_thread(int argc, const char **argv) {
     uint8_t buffer[DSU_MAX_PACKET];
     struct sockaddr_in client_addr;
     socklen_t client_len = sizeof(client_addr);
-    struct timeval tv;
-    tv.tv_sec = 0;
-    tv.tv_usec = 10000;
-    setsockopt(state->socket_fd, SOL_SOCKET, SO_RCVTIMEO, (const char *)&tv, sizeof(tv));
+    
+    // Set socket to non-blocking
+    int nonblock = 1;
+    setsockopt(state->socket_fd, SOL_SOCKET, SO_NONBLOCK, 
+               (const char *)&nonblock, sizeof(nonblock));
+    
     while (!state->should_stop) {
         int received = recvfrom(state->socket_fd, buffer, DSU_MAX_PACKET, 0,
                                 (struct sockaddr *)&client_addr, &client_len);
-        if (received <= 0) continue;
+        if (received <= 0) {
+            // No data available - sleep and try again
+            OSSleepTicks(OSSecondsToTicks(0.001));  // 1ms
+            continue;
+        }
         state->packets_received++;
         if (received < DSU_HEADER_SIZE) continue;
         DSUHeader *h = (DSUHeader *)buffer;
         if (h->magic[0] != 'D' || h->magic[1] != 'S' || h->magic[2] != 'U' || h->magic[3] != 'C') continue;
-        uint16_t msg_type;
-        memcpy(&msg_type, buffer + DSU_HEADER_SIZE, 2);
-        uint8_t *payload = buffer + DSU_HEADER_SIZE + 2;
-        uint16_t payload_len = received - DSU_HEADER_SIZE - 2;
+        uint32_t msg_type;
+        memcpy(&msg_type, buffer + DSU_HEADER_SIZE, 4);
+        uint8_t *payload = buffer + DSU_HEADER_SIZE + 4;
+        uint16_t payload_len = received - DSU_HEADER_SIZE - 4;
         switch (msg_type) {
             case DSU_MSG_VERSION:
                 handle_version(state, &client_addr, client_len);
@@ -213,7 +231,6 @@ int dsu_server_init(uint16_t port) {
     state->port = port;
     state->server_id = (uint32_t)OSGetTime();
     OSInitMutex(&state->mutex);
-    socket_lib_init();
     for (int i = 0; i < DSU_MAX_SLOTS; i++) {
         state->controllers[i].state = DSU_STATE_DISCONNECTED;
         state->controllers[i].model = DSU_MODEL_GENERIC;

@@ -3,6 +3,7 @@
 #include <coreinit/time.h>
 #include <stdio.h>
 #include <string.h>
+#include <sys/socket.h>
 
 // Global bridge UDP state
 BridgeUDPState g_bridge_udp = {
@@ -19,9 +20,6 @@ void bridge_udp_init(void) {
     // Initialize mutex
     OSInitMutex(&g_bridge_udp.mutex);
     
-    // Initialize socket library
-    socket_lib_init();
-    
     // Reset controller data
     memset(&g_bridge_udp.controller_data, 0, sizeof(BridgeControllerData));
     
@@ -33,9 +31,6 @@ void bridge_udp_deinit(void) {
     
     // Stop if running
     bridge_udp_stop();
-    
-    // Cleanup socket library
-    socket_lib_finish();
     
     OSReport("[Bridge UDP] Deinitialized\n");
 }
@@ -130,12 +125,10 @@ int bridge_udp_thread_func(int argc, const char **argv) {
     struct sockaddr_in client_addr;
     socklen_t client_len = sizeof(client_addr);
     
-    // Set socket to non-blocking with timeout
-    struct timeval tv;
-    tv.tv_sec = 0;
-    tv.tv_usec = 100000;  // 100ms timeout
-    setsockopt(g_bridge_udp.socket_fd, SOL_SOCKET, SO_RCVTIMEO, 
-               (const char *)&tv, sizeof(tv));
+    // Set socket to non-blocking
+    int nonblock = 1;
+    setsockopt(g_bridge_udp.socket_fd, SOL_SOCKET, SO_NONBLOCK, 
+               (const char *)&nonblock, sizeof(nonblock));
     
     OSReport("[Bridge UDP] Receiver thread started\n");
     
@@ -147,7 +140,8 @@ int bridge_udp_thread_func(int argc, const char **argv) {
                                        &client_len);
         
         if (bytes_received <= 0) {
-            // Timeout or error - continue
+            // No data available - sleep and try again
+            OSSleepTicks(OSSecondsToTicks(0.01));  // 10ms
             continue;
         }
         

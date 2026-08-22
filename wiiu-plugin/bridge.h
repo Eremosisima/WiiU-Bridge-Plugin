@@ -9,6 +9,10 @@
 #include <string.h>
 #include <stdio.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 // Protocol constants
 #define HEADER_MAGIC 0x57425244  // "WBRD" - WiiU Bridge
 #define PROTOCOL_VERSION 1
@@ -70,3 +74,7 @@ BOOL bridge_connect(const char *ip, uint16_t port);
 void bridge_disconnect(void);
 int bridge_thread_func(int argc, const char **argv);
 BOOL bridge_get_controller_data(BridgeControllerData *data);
+
+#ifdef __cplusplus
+}
+#endif

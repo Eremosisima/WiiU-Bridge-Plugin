@@ -10,6 +10,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /**
  * DSU Protocol Constants
  * Based on cemuhook-protocol v1001
@@ -258,3 +262,7 @@ uint32_t dsu_to_wiiu_buttons(uint16_t dsu_buttons);
  * @return DSU button mask
  */
 uint16_t wiiu_to_dsu_buttons(uint32_t wiiu_buttons);
+
+#ifdef __cplusplus
+}
+#endif

@@ -20,9 +20,6 @@ void bridge_init(void) {
     // Initialize mutex
     OSInitMutex(&g_bridge_state.mutex);
     
-    // Initialize socket library
-    socket_lib_init();
-    
     // Reset controller data
     memset(&g_bridge_state.controller_data, 0, sizeof(BridgeControllerData));
     
@@ -34,9 +31,6 @@ void bridge_deinit(void) {
     
     // Stop thread if running
     bridge_disconnect();
-    
-    // Cleanup socket library
-    socket_lib_finish();
     
     OSReport("[Bridge] Deinitialized\n");
 }

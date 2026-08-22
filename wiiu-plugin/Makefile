@@ -1,53 +1,49 @@
-# WiiU Bridge Plugin Makefile
-# Requires devkitPPC and WUPS
-
+ifeq ($(strip $(DEVKITPRO)),)
+$(error "Please set DEVKITPRO")
+endif
+ifeq ($(strip $(DEVKITPPC)),)
+$(error "Please set DEVKITPPC")
+endif
+TOPDIR ?= $(CURDIR)
+include $(DEVKITPRO)/wups/share/wups_rules
+WUT_ROOT := $(DEVKITPRO)/wut
 TARGET = wiiu_bridge_plugin
-
-SOURCES = main_v2.cpp bridge.c bridge_udp.c dsu_server.c dsu_crc32.c discovery.c
-
-INCLUDES = -I.
-
-LIBS = -lwups -lwut -lnsysnet -lpadscore -lcoreinit
-
-CXX = powerpc-eabi-g++
-CC = powerpc-eabi-gcc
-
-CFLAGS = -mogc -mcpu=750 -meabi -msdata=eabi \
-         -fno-exceptions -fno-rtti \
-         -g -O2 -Wall \
-         $(INCLUDES)
-
-CXXFLAGS = $(CFLAGS)
-
-LDFLAGS = -nodefaultlibs -nostartfiles \
-          -T $(DEVKITPPC)/powerpc-eabi/lib/link.ld
-
-BUILD_DIR = build
-
-OBJECTS_C = $(addprefix $(BUILD_DIR)/, $(filter %.c, $(SOURCES:.c=.o)))
-OBJECTS_CPP = $(addprefix $(BUILD_DIR)/, $(filter %.cpp, $(SOURCES:.cpp=.o)))
-OBJECTS = $(OBJECTS_C) $(OBJECTS_CPP)
-
-all: $(TARGET).wps
-
-$(BUILD_DIR):
-	mkdir -p $(BUILD_DIR)
-
-$(BUILD_DIR)/%.o: %.c | $(BUILD_DIR)
-	$(CC) $(CFLAGS) -c $< -o $@
-
-$(BUILD_DIR)/%.o: %.cpp | $(BUILD_DIR)
-	$(CXX) $(CXXFLAGS) -c $< -o $@
-
-$(TARGET).wps: $(OBJECTS)
-	$(CXX) $(CFLAGS) $(LDFLAGS) $^ $(LIBS) -o $@
-	@echo "Built: $@"
-
+BUILD = build
+SOURCES = .
+CFILES := dsu_crc32.c dsu_server.c discovery.c bridge.c bridge_udp.c
+CPPFILES := main_v2.cpp
+CFLAGS := -g -Wall -O2 -ffunction-sections $(MACHDEP)
+CFLAGS += $(INCLUDE) -D__WIIU__ -D__WUT__ -D__WUPS__
+CXXFLAGS := $(CFLAGS) -std=c++20
+LDFLAGS = -g $(MACHDEP) $(RPXSPECS) -Wl,-Map,$(notdir $*.map) $(WUPSSPECS)
+LIBS := -lwups -lwut
+LIBDIRS := $(PORTLIBS) $(WUPS_ROOT) $(WUT_ROOT)
+ifneq ($(BUILD),$(notdir $(CURDIR)))
+export OUTPUT := $(CURDIR)/$(TARGET)
+export TOPDIR := $(CURDIR)
+export VPATH := $(foreach dir,$(SOURCES),$(CURDIR)/$(dir))
+export DEPSDIR := $(CURDIR)/$(BUILD)
+ifeq ($(strip $(CPPFILES)),)
+export LD := $(CC)
+else
+export LD := $(CXX)
+endif
+export OFILES_SRC := $(CPPFILES:.cpp=.o) $(CFILES:.c=.o)
+export OFILES := $(OFILES_SRC)
+export INCLUDE := $(foreach dir,$(SOURCES),-I$(CURDIR)/$(dir)) $(foreach dir,$(LIBDIRS),-I$(dir)/include) -I$(CURDIR)/$(BUILD)
+export LIBPATHS := $(foreach dir,$(LIBDIRS),-L$(dir)/lib)
+.PHONY: $(BUILD) clean all
+all: $(BUILD)
+$(BUILD):
+	@mkdir -p $(BUILD)
+	@$(MAKE) --no-print-directory -C $(BUILD) -f $(CURDIR)/Makefile
 clean:
-	rm -rf $(BUILD_DIR) $(TARGET).wps
-
-install: $(TARGET).wps
-	@echo "Copy $(TARGET).wps to your SD card:"
-	@echo "  /wiiu/environments/aroma/plugins/"
-
-.PHONY: all clean install
+	@rm -fr $(BUILD) $(TARGET).wps $(TARGET).elf
+else
+.PHONY: all
+DEPENDS := $(OFILES:.o=.d)
+all : $(OUTPUT).wps
+$(OUTPUT).wps : $(OUTPUT).elf
+$(OUTPUT).elf : $(OFILES)
+-include $(DEPENDS)
+endif
