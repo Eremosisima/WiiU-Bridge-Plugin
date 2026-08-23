@@ -4,21 +4,23 @@
 #include <sys/socket.h>
 #include <nsysnet/socket.h>
 #include <arpa/inet.h>
+#include <poll.h>
 #include <string.h>
-#include <stdio.h>
 
 WUPS_PLUGIN_NAME("WiiU Bridge");
-WUPS_PLUGIN_DESCRIPTION("DSU bridge v5.2");
-WUPS_PLUGIN_VERSION("v5.2.0");
+WUPS_PLUGIN_DESCRIPTION("DSU bridge v6.3");
+WUPS_PLUGIN_VERSION("v6.3.0");
 WUPS_PLUGIN_AUTHOR("OpenCode");
 WUPS_PLUGIN_LICENSE("MIT");
 
 WUPS_USE_WUT_DEVOPTAB();
 
-static int g_dsu_socket = -1;
-static volatile bool g_dsu_running = false;
+static int g_sock = -1;
+static volatile int g_running = 0;
+static OSThread g_thread;
+static uint8_t g_stack[8192];
 
-static uint32_t dsu_crc32(const uint8_t *data, int len) {
+static uint32_t crc32_calc(const uint8_t *data, int len) {
     uint32_t crc = 0xFFFFFFFF;
     for (int i = 0; i < len; i++) {
         crc ^= data[i];
@@ -28,88 +30,52 @@ static uint32_t dsu_crc32(const uint8_t *data, int len) {
     return crc ^ 0xFFFFFFFF;
 }
 
-static void dsu_respond(struct sockaddr_in *client, int sock, uint32_t msg_type, uint8_t *payload, int payload_len) {
-    uint8_t packet[256];
-    memset(packet, 0, sizeof(packet));
-    memcpy(packet + 0, "DSUS", 4);
-    uint16_t ver = 1001;
-    memcpy(packet + 4, &ver, 2);
-    uint16_t plen = payload_len + 4;
-    memcpy(packet + 6, &plen, 2);
-    uint32_t id = 99999;
-    memcpy(packet + 12, &id, 4);
-    memcpy(packet + 16, &msg_type, 4);
-    if (payload_len > 0 && payload)
-        memcpy(packet + 20, payload, payload_len);
-    uint32_t crc = dsu_crc32(packet, 8);
-    memcpy(packet + 8, &crc, 4);
-    sendto(sock, packet, 20 + payload_len, 0, (struct sockaddr *)client, sizeof(*client));
-}
-
 static int dsu_thread_func(int argc, const char **argv) {
-    uint8_t buffer[512];
-    struct sockaddr_in client_addr;
-    socklen_t client_len = sizeof(client_addr);
-    OSReport("[Bridge] DSU thread running");
-    while (g_dsu_running) {
-        int received = recvfrom(g_dsu_socket, buffer, sizeof(buffer), 0,
-                                (struct sockaddr *)&client_addr, &client_len);
-        if (received <= 0) continue;
-        if (received < 20) continue;
-        if (memcmp(buffer, "DSUC", 4) != 0) continue;
-        uint32_t msg_type;
-        memcpy(&msg_type, buffer + 16, 4);
-        if (msg_type == 0x100000) {
-            uint32_t ver = 1001;
-            dsu_respond(&client_addr, g_dsu_socket, 0x100000, (uint8_t *)&ver, 4);
+    OSReport("[Bridge] Thread started, sock=%d", g_sock);
+    uint8_t buf[512];
+    struct sockaddr_in cli;
+    socklen_t cli_len = sizeof(cli);
+    struct pollfd pfd;
+    pfd.fd = g_sock;
+    pfd.events = POLLIN;
+    int count = 0;
+    
+    while (g_running) {
+        count++;
+        if (count % 100 == 0) {
+            OSReport("[Bridge] Thread alive, count=%d", count);
+        }
+        pfd.revents = 0;
+        int pr = poll(&pfd, 1, 100);
+        if (pr > 0 && (pfd.revents & POLLIN)) {
+            int n = recvfrom(g_sock, buf, sizeof(buf), 0, (struct sockaddr *)&cli, &cli_len);
+            OSReport("[Bridge] Received %d bytes", n);
+            if (n >= 20 && memcmp(buf, "DSUC", 4) == 0) {
+                uint32_t msg_type;
+                memcpy(&msg_type, buf + 16, 4);
+                if (msg_type == 0x100000) {
+                    uint8_t resp[24] = {0};
+                    resp[0] = 'D'; resp[1] = 'S'; resp[2] = 'U'; resp[3] = 'S';
+                    uint32_t v = 1001, mt = 0x100000, len = 8, id = 99999;
+                    memcpy(resp + 4, &v, 2);
+                    memcpy(resp + 6, &len, 2);
+                    memcpy(resp + 12, &id, 4);
+                    memcpy(resp + 16, &v, 4);
+                    memcpy(resp + 20, &mt, 4);
+                    uint32_t crc = crc32_calc(resp, 8);
+                    memcpy(resp + 8, &crc, 4);
+                    sendto(g_sock, resp, 24, 0, (struct sockaddr *)&cli, cli_len);
+                    OSReport("[Bridge] DSU response sent!");
+                }
+            }
         }
     }
+    OSReport("[Bridge] Thread exiting");
     return 0;
-}
-
-static bool dsu_start() {
-    if (g_dsu_running) return true;
-    g_dsu_socket = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
-    if (g_dsu_socket < 0) return false;
-    int reuse = 1;
-    setsockopt(g_dsu_socket, SOL_SOCKET, SO_REUSEADDR, (const char *)&reuse, sizeof(reuse));
-    struct sockaddr_in addr;
-    memset(&addr, 0, sizeof(addr));
-    addr.sin_family = AF_INET;
-    addr.sin_addr.s_addr = INADDR_ANY;
-    addr.sin_port = htons(26760);
-    if (bind(g_dsu_socket, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
-        socketclose(g_dsu_socket);
-        g_dsu_socket = -1;
-        return false;
-    }
-    static uint8_t stack[8192];
-    OSThread thread;
-    if (!OSCreateThread(&thread, dsu_thread_func, 0, NULL,
-                        stack + sizeof(stack), sizeof(stack),
-                        1, OS_THREAD_ATTRIB_AFFINITY_CPU0)) {
-        socketclose(g_dsu_socket);
-        g_dsu_socket = -1;
-        return false;
-    }
-    g_dsu_running = true;
-    OSResumeThread(&thread);
-    OSReport("[Bridge] DSU started on port 26760");
-    return true;
 }
 
 DECL_FUNCTION(int32_t, VPADRead, VPADChan chan, VPADStatus *buffer,
               uint32_t buffer_size, VPADReadError *error) {
-    static bool checked = false;
-    if (!checked) {
-        checked = true;
-        FILE *f = fopen("sd:/wiiu/bridge_on.txt", "r");
-        if (f) {
-            fclose(f);
-            remove("sd:/wiiu/bridge_on.txt");
-            dsu_start();
-        }
-    }
     VPADReadError real_error;
     int32_t result = real_VPADRead(chan, buffer, buffer_size, &real_error);
     if (error) *error = real_error;
@@ -119,11 +85,45 @@ DECL_FUNCTION(int32_t, VPADRead, VPADChan chan, VPADStatus *buffer,
 WUPS_MUST_REPLACE(VPADRead, WUPS_LOADER_LIBRARY_VPAD, VPADRead);
 
 INITIALIZE_PLUGIN() {
-    OSReport("[Bridge] Loaded v5.2");
+    OSReport("[Bridge] v6.3 INIT");
+    
+    g_sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+    OSReport("[Bridge] Socket: %d", g_sock);
+    if (g_sock < 0) return;
+    
+    int reuse = 1;
+    setsockopt(g_sock, SOL_SOCKET, SO_REUSEADDR, (const char *)&reuse, sizeof(reuse));
+    
+    struct sockaddr_in addr;
+    memset(&addr, 0, sizeof(addr));
+    addr.sin_family = AF_INET;
+    addr.sin_addr.s_addr = INADDR_ANY;
+    addr.sin_port = htons(26760);
+    
+    int br = bind(g_sock, (struct sockaddr *)&addr, sizeof(addr));
+    OSReport("[Bridge] Bind: %d", br);
+    if (br < 0) {
+        socketclose(g_sock);
+        g_sock = -1;
+        return;
+    }
+    
+    g_running = 1;
+    BOOL created = OSCreateThread(&g_thread, dsu_thread_func, 0, NULL,
+                        g_stack + sizeof(g_stack), sizeof(g_stack),
+                        1, OS_THREAD_ATTRIB_AFFINITY_CPU0);
+    OSReport("[Bridge] Thread created: %d", created);
+    if (created) {
+        OSResumeThread(&g_thread);
+        OSReport("[Bridge] Thread resumed");
+    }
 }
 
-ON_APPLICATION_START() {}
+ON_APPLICATION_START() {
+    OSReport("[Bridge] App started, sock=%d, running=%d", g_sock, g_running);
+}
+
 ON_APPLICATION_ENDS() {
-    g_dsu_running = false;
-    if (g_dsu_socket >= 0) { socketclose(g_dsu_socket); g_dsu_socket = -1; }
+    g_running = 0;
+    if (g_sock >= 0) { socketclose(g_sock); g_sock = -1; }
 }
