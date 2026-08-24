@@ -32,7 +32,7 @@ LDFLAGS	=	-g $(ARCH) $(RPXSPECS) -Wl,-Map,$(notdir $*.map) $(WUPSSPECS)
 
 BLOOPAIR_DIR	:=	$(CURDIR)/../Bloopair
 
-LIBS	:=	-lwups -lwut -lbloopair
+LIBS := -lwups -lwut
 
 LIBDIRS	:=	$(PORTLIBS) $(WUPS_ROOT) $(WUT_ROOT) $(BLOOPAIR_DIR)/libbloopair
 
